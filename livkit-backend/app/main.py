@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
 from app.routes.livekit_routes import router as livekit_router
 
 app = FastAPI(
@@ -10,13 +11,18 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change this in production
+    allow_origins=settings.cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(livekit_router)
+
+
+@app.on_event("startup")
+def validate_settings_on_startup() -> None:
+    settings.validate_livekit_settings()
 
 
 @app.get("/")

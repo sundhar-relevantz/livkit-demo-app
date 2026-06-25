@@ -1,5 +1,7 @@
 from livekit import api
 
+from app.core.config import settings
+
 
 def generate_livekit_token(
     room_name: str,
@@ -11,7 +13,7 @@ def generate_livekit_token(
     """
 
     token = (
-        api.AccessToken()
+        api.AccessToken(settings.LIVEKIT_API_KEY, settings.LIVEKIT_API_SECRET)
         .with_identity(participant_identity)
         .with_name(participant_name or participant_identity)
         .with_grants(
