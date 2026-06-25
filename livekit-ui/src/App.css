@@ -153,17 +153,19 @@
   display: grid;
   grid-template-rows: 1fr auto;
   position: relative;
+  overflow: hidden;
 }
 
 .conference-chat-panel {
   position: absolute;
-  top: 58px;
-  right: 310px;
-  bottom: 70px;
-  width: min(360px, 40vw);
+  top: 0;
+  right: 0;
+  bottom: 64px;
+  width: min(360px, 100%);
   border-left: 1px solid #d4e0ea;
   background: #ffffff;
   z-index: 20;
+  box-shadow: -8px 0 24px rgba(13, 33, 53, 0.12);
 }
 
 .room-insights {
@@ -285,11 +287,11 @@
   }
 
   .conference-chat-panel {
-    top: 86px;
+    top: 0;
     right: 0;
-    left: 0;
-    width: auto;
-    bottom: 220px;
+    left: auto;
+    width: min(100%, 360px);
+    bottom: 56px;
   }
 
   .room-insights {
