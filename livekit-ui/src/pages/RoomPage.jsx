@@ -128,35 +128,37 @@ function CustomConferenceLayout({ meetingView, chatMode }) {
 
   return (
     <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
-      <div
-        className={`custom-conference-layout chat-mode-${chatMode} ${
-          widgetState.showChat ? "chat-open" : ""
-        }`}
-      >
-        {!shouldShowFocusLayout ? (
-          <div className="lk-grid-layout-wrapper">
-            <GridLayout tracks={tracks}>
-              <ParticipantTile />
-            </GridLayout>
-          </div>
-        ) : (
-          <div className="lk-focus-layout-wrapper">
-            <FocusLayoutContainer>
-              <CarouselLayout tracks={carouselTracks}>
+      <div className="layout-stage">
+        <div
+          className={`custom-conference-layout chat-mode-${chatMode} ${
+            widgetState.showChat ? "chat-open" : ""
+          }`}
+        >
+          {!shouldShowFocusLayout ? (
+            <div className="lk-grid-layout-wrapper">
+              <GridLayout tracks={tracks}>
                 <ParticipantTile />
-              </CarouselLayout>
-              {activeFocusTrack ? <FocusLayout trackRef={activeFocusTrack} /> : null}
-            </FocusLayoutContainer>
-          </div>
-        )}
+              </GridLayout>
+            </div>
+          ) : (
+            <div className="lk-focus-layout-wrapper">
+              <FocusLayoutContainer>
+                <CarouselLayout tracks={carouselTracks}>
+                  <ParticipantTile />
+                </CarouselLayout>
+                {activeFocusTrack ? <FocusLayout trackRef={activeFocusTrack} /> : null}
+              </FocusLayoutContainer>
+            </div>
+          )}
 
-        <ControlBar controls={{ chat: true, settings: false }} />
+          <ControlBar controls={{ chat: true, settings: false }} />
+        </div>
+
+        <Chat
+          className={`conference-chat-panel conference-chat-panel-${chatMode}`}
+          style={{ display: widgetState.showChat ? "grid" : "none" }}
+        />
       </div>
-
-      <Chat
-        className={`conference-chat-panel conference-chat-panel-${chatMode}`}
-        style={{ display: widgetState.showChat ? "grid" : "none" }}
-      />
     </LayoutContextProvider>
   );
 }
