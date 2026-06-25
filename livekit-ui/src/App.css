@@ -120,6 +120,10 @@
   grid-template-rows: auto 1fr;
 }
 
+.teams-surface {
+  background: #f3f5f9;
+}
+
 .conference-header {
   display: flex;
   gap: 16px;
@@ -129,6 +133,34 @@
   background: #042641;
   color: #f6fcff;
   font-size: 0.95rem;
+}
+
+.meeting-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #d8e2ee;
+  background: #eef2f8;
+}
+
+.meeting-ribbon label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #20384e;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.meeting-ribbon select {
+  border: 1px solid #b7c7d8;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 0.82rem;
+  color: #16324d;
+  background: #ffffff;
 }
 
 .conference-room {
@@ -147,7 +179,16 @@
   grid-template-columns: 1fr 300px;
 }
 
+.conference-content.insights-compact {
+  grid-template-columns: 1fr 220px;
+}
+
+.conference-content.insights-hidden {
+  grid-template-columns: 1fr;
+}
+
 .custom-conference-layout {
+  --chat-panel-width: min(360px, 100%);
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -156,16 +197,57 @@
   overflow: hidden;
 }
 
+.custom-conference-layout .lk-grid-layout-wrapper,
+.custom-conference-layout .lk-focus-layout-wrapper,
+.custom-conference-layout .lk-control-bar {
+  transition: margin-right 0.25s ease, width 0.25s ease;
+}
+
+.custom-conference-layout.chat-open.chat-mode-floating .lk-grid-layout-wrapper,
+.custom-conference-layout.chat-open.chat-mode-floating .lk-focus-layout-wrapper,
+.custom-conference-layout.chat-open.chat-mode-floating .lk-control-bar {
+  margin-right: var(--chat-panel-width);
+}
+
 .conference-chat-panel {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 64px;
-  width: min(360px, 100%);
+  width: var(--chat-panel-width);
   border-left: 1px solid #d4e0ea;
   background: #ffffff;
   z-index: 20;
   box-shadow: -8px 0 24px rgba(13, 33, 53, 0.12);
+}
+
+.conference-chat-panel-docked {
+  width: min(420px, 100%);
+  border-left: 1px solid #c8d6e4;
+  background: #fdfefe;
+}
+
+.chat-mode-docked .conference-chat-panel {
+  --chat-panel-width: min(420px, 100%);
+}
+
+.custom-conference-layout.chat-open.chat-mode-docked .lk-grid-layout-wrapper,
+.custom-conference-layout.chat-open.chat-mode-docked .lk-focus-layout-wrapper,
+.custom-conference-layout.chat-open.chat-mode-docked .lk-control-bar {
+  margin-right: var(--chat-panel-width);
+}
+
+.room-insights-shell-compact .room-insights {
+  padding: 10px;
+}
+
+.room-insights-shell-compact .participants-list {
+  gap: 4px;
+}
+
+.room-insights-shell-compact .participants-list li {
+  padding: 6px 8px;
+  font-size: 0.8rem;
 }
 
 .room-insights {
@@ -281,6 +363,15 @@
     font-size: 0.88rem;
   }
 
+  .meeting-ribbon {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .meeting-ribbon label {
+    justify-content: space-between;
+  }
+
   .conference-content {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr auto;
@@ -292,6 +383,15 @@
     left: auto;
     width: min(100%, 360px);
     bottom: 56px;
+  }
+
+  .custom-conference-layout.chat-open.chat-mode-floating .lk-grid-layout-wrapper,
+  .custom-conference-layout.chat-open.chat-mode-floating .lk-focus-layout-wrapper,
+  .custom-conference-layout.chat-open.chat-mode-floating .lk-control-bar,
+  .custom-conference-layout.chat-open.chat-mode-docked .lk-grid-layout-wrapper,
+  .custom-conference-layout.chat-open.chat-mode-docked .lk-focus-layout-wrapper,
+  .custom-conference-layout.chat-open.chat-mode-docked .lk-control-bar {
+    margin-right: 0;
   }
 
   .room-insights {

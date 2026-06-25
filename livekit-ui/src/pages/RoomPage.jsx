@@ -72,7 +72,7 @@ function RoomInsightsPanel() {
   );
 }
 
-function CustomConferenceLayout() {
+function CustomConferenceLayout({ meetingView, chatMode }) {
   const [widgetState, setWidgetState] = useState({
     showChat: false,
     unreadMessages: 0,
@@ -87,6 +87,7 @@ function CustomConferenceLayout() {
     { updateOnlyOn: [RoomEvent.ActiveSpeakersChanged], onlySubscribed: false }
   );
   const focusTrack = usePinnedTracks(layoutContext)?.[0];
+  const fallbackFocusTrack = tracks.find((track) => track?.source === Track.Source.Camera);
 
   const screenShareTracks = tracks.filter(
     (track) =>
@@ -107,7 +108,14 @@ function CustomConferenceLayout() {
     );
   };
 
-  const carouselTracks = tracks.filter((track) => !isSameTrack(track, focusTrack));
+  const activeFocusTrack = focusTrack || fallbackFocusTrack;
+  const carouselTracks = tracks.filter((track) => !isSameTrack(track, activeFocusTrack));
+  const shouldShowFocusLayout =
+    meetingView === "focus"
+      ? Boolean(activeFocusTrack)
+      : meetingView === "auto"
+        ? Boolean(focusTrack)
+        : false;
 
   useEffect(() => {
     if (!focusTrack && screenShareTracks.length > 0) {
@@ -120,8 +128,12 @@ function CustomConferenceLayout() {
 
   return (
     <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
-      <div className="custom-conference-layout">
-        {!focusTrack ? (
+      <div
+        className={`custom-conference-layout chat-mode-${chatMode} ${
+          widgetState.showChat ? "chat-open" : ""
+        }`}
+      >
+        {!shouldShowFocusLayout ? (
           <div className="lk-grid-layout-wrapper">
             <GridLayout tracks={tracks}>
               <ParticipantTile />
@@ -133,7 +145,7 @@ function CustomConferenceLayout() {
               <CarouselLayout tracks={carouselTracks}>
                 <ParticipantTile />
               </CarouselLayout>
-              <FocusLayout trackRef={focusTrack} />
+              {activeFocusTrack ? <FocusLayout trackRef={activeFocusTrack} /> : null}
             </FocusLayoutContainer>
           </div>
         )}
@@ -142,7 +154,7 @@ function CustomConferenceLayout() {
       </div>
 
       <Chat
-        className="conference-chat-panel"
+        className={`conference-chat-panel conference-chat-panel-${chatMode}`}
         style={{ display: widgetState.showChat ? "grid" : "none" }}
       />
     </LayoutContextProvider>
@@ -165,6 +177,9 @@ function RoomPage() {
     isLoading: !location.state?.token,
     error: "",
   });
+  const [meetingView, setMeetingView] = useState("auto");
+  const [chatMode, setChatMode] = useState("floating");
+  const [insightsMode, setInsightsMode] = useState("expanded");
 
   useEffect(() => {
     if (location.state?.token) {
@@ -275,7 +290,7 @@ function RoomPage() {
   }
 
   return (
-    <div className="conference-page">
+    <div className="conference-page teams-surface">
       <LiveKitRoom
         video
         audio
@@ -295,9 +310,41 @@ function RoomPage() {
             </DisconnectButton>
           </header>
 
-          <div className="conference-content">
-            <CustomConferenceLayout />
-            <RoomInsightsPanel />
+          <section className="meeting-ribbon" aria-label="Meeting controls">
+            <label>
+              View
+              <select value={meetingView} onChange={(event) => setMeetingView(event.target.value)}>
+                <option value="auto">Auto</option>
+                <option value="grid">Gallery</option>
+                <option value="focus">Presenter</option>
+              </select>
+            </label>
+
+            <label>
+              Chat panel
+              <select value={chatMode} onChange={(event) => setChatMode(event.target.value)}>
+                <option value="floating">Floating</option>
+                <option value="docked">Docked</option>
+              </select>
+            </label>
+
+            <label>
+              Insights
+              <select value={insightsMode} onChange={(event) => setInsightsMode(event.target.value)}>
+                <option value="expanded">Expanded</option>
+                <option value="compact">Compact</option>
+                <option value="hidden">Hidden</option>
+              </select>
+            </label>
+          </section>
+
+          <div className={`conference-content insights-${insightsMode}`}>
+            <CustomConferenceLayout meetingView={meetingView} chatMode={chatMode} />
+            {insightsMode !== "hidden" ? (
+              <div className={`room-insights-shell room-insights-shell-${insightsMode}`}>
+                <RoomInsightsPanel />
+              </div>
+            ) : null}
           </div>
           <ConnectionStateToast />
           <RoomAudioRenderer />
