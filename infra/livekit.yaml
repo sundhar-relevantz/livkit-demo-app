@@ -1,0 +1,10 @@
+port: 7880
+
+keys:
+  devkey: secretwebrtcrelevantzsecretwebrtcrelevantz123
+
+rtc:
+  tcp_port: 7881
+
+logging:
+  level: info
