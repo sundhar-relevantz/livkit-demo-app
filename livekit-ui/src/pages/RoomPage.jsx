@@ -26,7 +26,6 @@ import { TranscriptOverlay } from "../components/room/TranscriptOverlay";
 import {
   clearPersistedList,
   getChatStorageKey,
-  getTranscriptStorageKey,
 } from "../components/room/roomPanelStorage";
 import {
   clearLastSession,
@@ -34,10 +33,25 @@ import {
   saveLastSession,
 } from "../sessionStorage";
 
+const TRANSCRIPT_LANGUAGES = [
+  { value: "en-US", label: "English" },
+  { value: "ta-IN", label: "Tamil" },
+  { value: "hi-IN", label: "Hindi" },
+  { value: "es-ES", label: "Spanish" },
+  { value: "fr-FR", label: "French" },
+  { value: "de-DE", label: "German" },
+];
+
 /**
  * Controls the room stage, side panels, and overlay subtitle visibility.
  */
-function CustomConferenceLayout({ meetingView, insightsEnabled, roomName, participantIdentity }) {
+function CustomConferenceLayout({
+  meetingView,
+  insightsEnabled,
+  roomName,
+  participantIdentity,
+  transcriptLanguage,
+}) {
   const [widgetState, setWidgetState] = useState({
     showChat: false,
     unreadMessages: 0,
@@ -124,9 +138,8 @@ function CustomConferenceLayout({ meetingView, insightsEnabled, roomName, partic
             {showTranscriptOverlay ? (
               <TranscriptOverlay
                 key={`transcript-${roomName}-${participantIdentity}`}
-                roomName={roomName}
-                participantIdentity={participantIdentity}
                 variant="overlay"
+                transcriptLanguage={transcriptLanguage}
               />
             ) : null}
 
@@ -173,6 +186,7 @@ function RoomPage() {
   });
   const [meetingView, setMeetingView] = useState("auto");
   const [insightsEnabled, setInsightsEnabled] = useState(true);
+  const [transcriptLanguage, setTranscriptLanguage] = useState("en-US");
 
   useEffect(() => {
     if (location.state?.token) {
@@ -255,7 +269,6 @@ function RoomPage() {
 
   const handleLeave = () => {
     clearPersistedList(getChatStorageKey(currentRoomName, participantIdentity));
-    clearPersistedList(getTranscriptStorageKey(currentRoomName, participantIdentity));
     clearLastSession();
     navigate("/join", { replace: true });
   };
@@ -316,6 +329,20 @@ function RoomPage() {
               </select>
             </label>
 
+            <label>
+              Transcript language
+              <select
+                value={transcriptLanguage}
+                onChange={(event) => setTranscriptLanguage(event.target.value)}
+              >
+                {TRANSCRIPT_LANGUAGES.map((languageOption) => (
+                  <option key={languageOption.value} value={languageOption.value}>
+                    {languageOption.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <button
               type="button"
               className="secondary-btn"
@@ -330,6 +357,7 @@ function RoomPage() {
             insightsEnabled={insightsEnabled}
             roomName={currentRoomName}
             participantIdentity={participantIdentity}
+            transcriptLanguage={transcriptLanguage}
           />
           <ConnectionStateToast />
           <RoomAudioRenderer />
