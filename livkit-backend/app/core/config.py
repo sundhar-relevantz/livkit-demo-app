@@ -8,6 +8,10 @@ class Settings:
     LIVEKIT_API_KEY: str = os.getenv("LIVEKIT_API_KEY", "")
     LIVEKIT_API_SECRET: str = os.getenv("LIVEKIT_API_SECRET", "")
     LIVEKIT_URL: str = os.getenv("LIVEKIT_URL", "")
+    TRANSLATE_API_URL: str = os.getenv(
+        "TRANSLATE_API_URL",
+        "https://translate.argosopentech.com/translate",
+    )
 
     BACKEND_HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")
     BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))

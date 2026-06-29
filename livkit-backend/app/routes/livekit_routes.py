@@ -1,6 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+import json
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
+from app.core.config import settings
 from app.livekit.token_service import generate_livekit_token
 from app.livekit.room_service import (
     create_livekit_room,
@@ -22,6 +26,11 @@ class TokenRequest(BaseModel):
 
 class RoomRequest(BaseModel):
     room_name: str = Field(min_length=1, max_length=128)
+
+
+class TranslateRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
+    target_language: str = Field(min_length=2, max_length=16)
 
 
 @router.post("/token")
@@ -133,3 +142,52 @@ async def remove_room(room_name: str):
             status_code=500,
             detail=str(error),
         )
+
+
+@router.post("/translate")
+async def translate_text(payload: TranslateRequest):
+    try:
+        text = payload.text.strip()
+        target_language = payload.target_language.strip().lower()
+
+        if not text:
+            raise HTTPException(status_code=400, detail="text is required")
+
+        request_body = json.dumps(
+            {
+                "q": text,
+                "source": "auto",
+                "target": target_language,
+                "format": "text",
+            }
+        ).encode("utf-8")
+
+        translation_request = urllib_request.Request(
+            settings.TRANSLATE_API_URL,
+            data=request_body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib_request.urlopen(translation_request, timeout=10) as response:
+                response_data = json.loads(response.read().decode("utf-8"))
+                translated_text = response_data.get("translatedText", text)
+
+                return {
+                    "translated_text": translated_text,
+                    "target_language": target_language,
+                    "fallback_used": translated_text == text,
+                }
+        except (urllib_error.URLError, urllib_error.HTTPError, TimeoutError) as error:
+            return {
+                "translated_text": text,
+                "target_language": target_language,
+                "fallback_used": True,
+                "translation_error": str(error),
+            }
+
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))

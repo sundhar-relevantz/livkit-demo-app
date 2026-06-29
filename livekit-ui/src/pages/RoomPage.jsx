@@ -18,6 +18,7 @@ import {
   useLocalParticipant,
   useParticipants,
   usePinnedTracks,
+  useTranscriptions,
   useSpeakingParticipants,
   useTracks,
 } from "@livekit/components-react";
@@ -72,7 +73,211 @@ function RoomInsightsPanel() {
   );
 }
 
-function CustomConferenceLayout({ meetingView, insightsMode }) {
+function TranscriptPanel() {
+  const transcriptions = useTranscriptions();
+  const [targetLanguage, setTargetLanguage] = useState("en");
+  const [translatedEntries, setTranslatedEntries] = useState({});
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState("");
+
+  const transcriptApiUrl = useMemo(
+    () => `${appConfig.backendHttpUrl}/livekit/translate`,
+    []
+  );
+
+  const transcriptItems = useMemo(() => {
+    return transcriptions.map((item, index) => {
+      const rawText =
+        item?.text ?? item?.transcript ?? item?.message ?? item?.content ?? String(item ?? "");
+      const speaker =
+        item?.participant?.name ??
+        item?.participantIdentity ??
+        item?.identity ??
+        item?.speaker ??
+        "Speaker";
+      const timestampValue =
+        item?.timestamp ?? item?.time ?? item?.startTime ?? item?.createdAt ?? index;
+
+      return {
+        id: item?.id ?? item?.sid ?? `${index}-${timestampValue}-${rawText}`,
+        text: String(rawText).trim(),
+        speaker: String(speaker),
+        timestamp: timestampValue,
+      };
+    });
+  }, [transcriptions]);
+
+  const groupedTranscriptItems = useMemo(() => {
+    if (!transcriptItems.length) {
+      return [];
+    }
+
+    const groups = [];
+
+    for (const entry of transcriptItems) {
+      const lastGroup = groups[groups.length - 1];
+
+      if (lastGroup && lastGroup.speaker === entry.speaker) {
+        lastGroup.lines.push(entry);
+        lastGroup.text = `${lastGroup.text} ${entry.text}`.trim();
+        lastGroup.timestamp = entry.timestamp;
+      } else {
+        groups.push({
+          id: entry.id,
+          speaker: entry.speaker,
+          timestamp: entry.timestamp,
+          text: entry.text,
+          lines: [entry],
+        });
+      }
+    }
+
+    return groups;
+  }, [transcriptItems]);
+
+  const displayedTranscriptText = useMemo(() => {
+    return groupedTranscriptItems
+      .map((entry) => {
+        const lineText = targetLanguage === "en" ? entry.text : translatedEntries[entry.id] || entry.text;
+        const timeLabel = new Date(entry.timestamp).toLocaleTimeString();
+
+        return `[${timeLabel}] ${entry.speaker}: ${lineText}`;
+      })
+      .join("\n");
+  }, [groupedTranscriptItems, targetLanguage, translatedEntries]);
+
+  const handleDownloadTranscript = () => {
+    if (!groupedTranscriptItems.length) {
+      return;
+    }
+
+    const downloadContent = displayedTranscriptText;
+
+    const blob = new Blob([downloadContent], { type: "text/plain;charset=utf-8" });
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = downloadUrl;
+    anchor.download = `livekit-transcript-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
+    anchor.click();
+    window.URL.revokeObjectURL(downloadUrl);
+  };
+
+  useEffect(() => {
+    const translateEntries = async () => {
+      if (!groupedTranscriptItems.length) {
+        setTranslatedEntries({});
+        return;
+      }
+
+      if (targetLanguage === "en") {
+        setTranslatedEntries({});
+        setTranslationError("");
+        return;
+      }
+
+      setIsTranslating(true);
+      setTranslationError("");
+
+      try {
+        const translations = await Promise.all(
+          groupedTranscriptItems.map(async (entry) => {
+            if (!entry.text) {
+              return [entry.id, ""];
+            }
+
+            const response = await fetch(transcriptApiUrl, {
+              method: "POST",
+              headers: {
+                accept: "application/json",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                text: entry.text,
+                target_language: targetLanguage,
+              }),
+            });
+
+            if (!response.ok) {
+              const errorBody = await response.text();
+              throw new Error(errorBody || `Translation failed (${response.status})`);
+            }
+
+            const data = await response.json();
+            return [entry.id, data.translated_text || entry.text];
+          })
+        );
+
+        setTranslatedEntries(Object.fromEntries(translations));
+      } catch (error) {
+        setTranslationError(error instanceof Error ? error.message : "Translation failed.");
+      } finally {
+        setIsTranslating(false);
+      }
+    };
+
+    translateEntries();
+  }, [targetLanguage, groupedTranscriptItems, transcriptApiUrl]);
+
+  return (
+    <section className="conference-side-panel transcript-panel">
+      <div className="transcript-header">
+        <div>
+          <h2>Transcript</h2>
+          <p>Live captions and translated text for the current room.</p>
+        </div>
+
+        <div className="transcript-controls">
+          <label>
+            Translate to
+            <select value={targetLanguage} onChange={(event) => setTargetLanguage(event.target.value)}>
+              <option value="en">English</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="hi">Hindi</option>
+            </select>
+          </label>
+
+          <button
+            type="button"
+            className="secondary-btn transcript-download-btn"
+            onClick={handleDownloadTranscript}
+            disabled={!groupedTranscriptItems.length}
+          >
+            Download TXT
+          </button>
+        </div>
+      </div>
+
+      <div className="transcript-status-row">
+        <span>
+          {isTranslating
+            ? "Translating…"
+            : `${groupedTranscriptItems.length} grouped line(s) from ${transcriptItems.length} transcript line(s)`}
+        </span>
+        {translationError ? <span className="transcript-error">{translationError}</span> : null}
+      </div>
+
+      <div className="transcript-list">
+        {groupedTranscriptItems.length ? (
+          groupedTranscriptItems.map((entry) => (
+            <article className="transcript-item" key={entry.id}>
+              <div className="transcript-meta">
+                <strong>{entry.speaker}</strong>
+                <span>{new Date(entry.timestamp).toLocaleTimeString()}</span>
+              </div>
+              <p>{targetLanguage === "en" ? entry.text : translatedEntries[entry.id] || entry.text}</p>
+            </article>
+          ))
+        ) : (
+          <p className="transcript-empty">Transcript will appear here as the room receives speech-to-text updates.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function CustomConferenceLayout({ meetingView, panelMode, insightsMode }) {
   const [widgetState, setWidgetState] = useState({
     showChat: false,
     unreadMessages: 0,
@@ -128,7 +333,15 @@ function CustomConferenceLayout({ meetingView, insightsMode }) {
 
   const isChatOpen = widgetState.showChat;
   const shouldShowInsights = insightsMode !== "hidden";
-  const sidePanelMode = isChatOpen ? "chat" : shouldShowInsights ? insightsMode : "hidden";
+  const effectivePanelMode = isChatOpen ? "chat" : panelMode;
+  const sidePanelMode =
+    effectivePanelMode === "chat"
+      ? "chat"
+      : effectivePanelMode === "transcript"
+        ? "transcript"
+        : shouldShowInsights
+          ? insightsMode
+          : "hidden";
 
   return (
     <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
@@ -162,7 +375,13 @@ function CustomConferenceLayout({ meetingView, insightsMode }) {
 
         {sidePanelMode !== "hidden" ? (
           <aside className={`conference-side-panel conference-side-panel-${sidePanelMode}`}>
-            {isChatOpen ? <Chat className="conference-side-chat" /> : <RoomInsightsPanel />}
+            {sidePanelMode === "chat" ? (
+              <Chat className="conference-side-chat" />
+            ) : sidePanelMode === "transcript" ? (
+              <TranscriptPanel />
+            ) : (
+              <RoomInsightsPanel />
+            )}
           </aside>
         ) : null}
       </div>
@@ -187,6 +406,7 @@ function RoomPage() {
     error: "",
   });
   const [meetingView, setMeetingView] = useState("auto");
+  const [panelMode, setPanelMode] = useState("insights");
   const [insightsMode, setInsightsMode] = useState("expanded");
 
   useEffect(() => {
@@ -329,6 +549,14 @@ function RoomPage() {
             </label>
 
             <label>
+              Panel
+              <select value={panelMode} onChange={(event) => setPanelMode(event.target.value)}>
+                <option value="insights">Insights</option>
+                <option value="transcript">Transcript</option>
+              </select>
+            </label>
+
+            <label>
               Insights
               <select value={insightsMode} onChange={(event) => setInsightsMode(event.target.value)}>
                 <option value="expanded">Expanded</option>
@@ -338,7 +566,7 @@ function RoomPage() {
             </label>
           </section>
 
-          <CustomConferenceLayout meetingView={meetingView} insightsMode={insightsMode} />
+          <CustomConferenceLayout meetingView={meetingView} panelMode={panelMode} insightsMode={insightsMode} />
           <ConnectionStateToast />
           <RoomAudioRenderer />
         </div>
