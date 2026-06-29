@@ -768,7 +768,7 @@ function CustomConferenceLayout({ meetingView, panelMode, insightsMode, roomName
 
   const isChatOpen = widgetState.showChat;
   const shouldShowInsights = insightsMode !== "hidden";
-  const effectivePanelMode = panelMode === "transcript" ? "transcript" : isChatOpen ? "chat" : panelMode;
+  const effectivePanelMode = isChatOpen ? "chat" : panelMode;
   const sidePanelMode =
     effectivePanelMode === "chat"
       ? "chat"
