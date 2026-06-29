@@ -18,7 +18,7 @@ import {
   useLocalParticipant,
   useParticipants,
   usePinnedTracks,
-  useTranscriptions,
+  useTextStream,
   useSpeakingParticipants,
   useTracks,
 } from "@livekit/components-react";
@@ -30,6 +30,8 @@ import {
   loadLastSession,
   saveLastSession,
 } from "../sessionStorage";
+
+const TRANSCRIPT_TOPIC = "lk.transcription";
 
 function RoomInsightsPanel() {
   const participants = useParticipants();
@@ -74,38 +76,54 @@ function RoomInsightsPanel() {
 }
 
 function TranscriptPanel() {
-  const transcriptions = useTranscriptions();
+  const { localParticipant } = useLocalParticipant();
+  const participants = useParticipants();
   const [targetLanguage, setTargetLanguage] = useState("en");
   const [translatedEntries, setTranslatedEntries] = useState({});
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState("");
+  const [speechStatus, setSpeechStatus] = useState(() => {
+    if (typeof window === "undefined") {
+      return "unsupported";
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    return SpeechRecognition ? "idle" : "unsupported";
+  });
+  const { textStreams } = useTextStream(TRANSCRIPT_TOPIC);
 
   const transcriptApiUrl = useMemo(
     () => `${appConfig.backendHttpUrl}/livekit/translate`,
     []
   );
 
+  const participantLabelByIdentity = useMemo(() => {
+    return new Map(
+      participants.map((participant) => [
+        participant.identity,
+        participant.name || participant.identity,
+      ])
+    );
+  }, [participants]);
+
   const transcriptItems = useMemo(() => {
-    return transcriptions.map((item, index) => {
-      const rawText =
-        item?.text ?? item?.transcript ?? item?.message ?? item?.content ?? String(item ?? "");
+    return textStreams.map((item, index) => {
+      const rawText = item?.text ?? String(item ?? "");
+      const speakerIdentity = item?.participantInfo?.identity ?? "Speaker";
       const speaker =
-        item?.participant?.name ??
-        item?.participantIdentity ??
-        item?.identity ??
-        item?.speaker ??
-        "Speaker";
-      const timestampValue =
-        item?.timestamp ?? item?.time ?? item?.startTime ?? item?.createdAt ?? index;
+        participantLabelByIdentity.get(speakerIdentity) || speakerIdentity || "Speaker";
+      const timestampValue = item?.streamInfo?.timestamp ?? index;
 
       return {
         id: item?.id ?? item?.sid ?? `${index}-${timestampValue}-${rawText}`,
         text: String(rawText).trim(),
         speaker: String(speaker),
         timestamp: timestampValue,
+        source: "shared-text-stream",
+        order: index,
       };
     });
-  }, [transcriptions]);
+  }, [participantLabelByIdentity, textStreams]);
 
   const groupedTranscriptItems = useMemo(() => {
     if (!transcriptItems.length) {
@@ -161,6 +179,63 @@ function TranscriptPanel() {
     anchor.click();
     window.URL.revokeObjectURL(downloadUrl);
   };
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      return undefined;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => setSpeechStatus("listening");
+    recognition.onerror = () => setSpeechStatus("error");
+    recognition.onend = () => setSpeechStatus("stopped");
+    recognition.onresult = async (event) => {
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        if (!result.isFinal) {
+          continue;
+        }
+
+        const transcriptText = result[0]?.transcript?.trim();
+        if (!transcriptText) {
+          continue;
+        }
+
+        try {
+          await localParticipant.sendText(transcriptText, { topic: TRANSCRIPT_TOPIC });
+        } catch (error) {
+          setSpeechStatus("error");
+          setTranslationError(
+            error instanceof Error ? error.message : "Failed to publish transcript to the room."
+          );
+          return;
+        }
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch {
+      return undefined;
+    }
+
+    return () => {
+      recognition.onresult = null;
+      recognition.onend = null;
+      recognition.onerror = null;
+      try {
+        recognition.stop();
+      } catch {
+        // ignore stop errors from browser speech recognition
+      }
+    };
+  }, [localParticipant]);
 
   useEffect(() => {
     const translateEntries = async () => {
@@ -253,7 +328,16 @@ function TranscriptPanel() {
         <span>
           {isTranslating
             ? "Translating…"
-            : `${groupedTranscriptItems.length} grouped line(s) from ${transcriptItems.length} transcript line(s)`}
+            : `${groupedTranscriptItems.length} grouped line(s) from ${transcriptItems.length} shared transcript line(s)`}
+        </span>
+        <span className="transcript-source-state">
+          {speechStatus === "unsupported"
+            ? "Browser captions unavailable; shared room transcript still plays back"
+            : speechStatus === "listening"
+              ? "Capturing microphone and publishing to room"
+              : speechStatus === "error"
+                ? "Transcript capture paused"
+                : "Ready to capture and publish room captions"}
         </span>
         {translationError ? <span className="transcript-error">{translationError}</span> : null}
       </div>
@@ -270,7 +354,7 @@ function TranscriptPanel() {
             </article>
           ))
         ) : (
-          <p className="transcript-empty">Transcript will appear here as the room receives speech-to-text updates.</p>
+          <p className="transcript-empty">Transcript will appear here as the room receives shared text-stream updates.</p>
         )}
       </div>
     </section>

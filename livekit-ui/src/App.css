@@ -298,6 +298,16 @@
   align-items: center;
   font-size: 0.8rem;
   color: #44607b;
+  flex-wrap: wrap;
+}
+
+.transcript-source-state {
+  border-radius: 999px;
+  border: 1px solid #b8cfe0;
+  padding: 4px 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #eef6ff 100%);
+  color: #1f4f72;
+  font-weight: 600;
 }
 
 .transcript-error {
