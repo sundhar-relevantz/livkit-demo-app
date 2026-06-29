@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "@livekit/components-styles";
 import {
   CarouselLayout,
-  Chat,
   ConnectionState,
   ConnectionStateToast,
   ControlBar,
@@ -14,6 +13,7 @@ import {
   LiveKitRoom,
   ParticipantTile,
   RoomAudioRenderer,
+  useChat,
   useCreateLayoutContext,
   useLocalParticipant,
   useParticipants,
@@ -32,6 +32,234 @@ import {
 } from "../sessionStorage";
 
 const TRANSCRIPT_TOPIC = "lk.transcription";
+const CHAT_HISTORY_LIMIT = 250;
+const TRANSCRIPT_HISTORY_LIMIT = 500;
+
+const toStorageSafeSegment = (value) => encodeURIComponent(String(value || "unknown"));
+
+const getChatStorageKey = (roomName, participantIdentity) =>
+  `livkit:chat:${toStorageSafeSegment(roomName)}:${toStorageSafeSegment(participantIdentity)}`;
+
+const getTranscriptStorageKey = (roomName, participantIdentity) =>
+  `livkit:transcript:${toStorageSafeSegment(roomName)}:${toStorageSafeSegment(participantIdentity)}`;
+
+const readPersistedList = (storageKey) => {
+  if (typeof window === "undefined" || !storageKey) {
+    return [];
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(storageKey);
+    if (!rawValue) {
+      return [];
+    }
+
+    const parsed = JSON.parse(rawValue);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const writePersistedList = (storageKey, listValue) => {
+  if (typeof window === "undefined" || !storageKey) {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(storageKey, JSON.stringify(listValue));
+  } catch {
+    // ignore session storage write failures
+  }
+};
+
+const clearPersistedList = (storageKey) => {
+  if (typeof window === "undefined" || !storageKey) {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(storageKey);
+  } catch {
+    // ignore session storage clear failures
+  }
+};
+
+function ChatPanel({ roomName, participantIdentity }) {
+  const { localParticipant } = useLocalParticipant();
+  const { chatMessages, send, isSending } = useChat();
+  const [draftMessage, setDraftMessage] = useState("");
+  const [sendError, setSendError] = useState("");
+  const [lastReadMessageIndex, setLastReadMessageIndex] = useState(-1);
+  const scrollContainerRef = useRef(null);
+
+  const chatStorageKey = useMemo(
+    () => getChatStorageKey(roomName, participantIdentity),
+    [roomName, participantIdentity]
+  );
+
+  const [persistedMessages] = useState(() => readPersistedList(chatStorageKey));
+
+  const mergedMessages = useMemo(() => {
+    const normalizedIncomingMessages = chatMessages.map((message, index) => ({
+      id: message.id || `${message.timestamp}-${message.message}`,
+      message: message.message || "",
+      timestamp: Number(message.timestamp ?? index),
+      fromIdentity: message.from?.identity || "unknown",
+      fromName: message.from?.name || message.from?.identity || "Participant",
+    }));
+
+    const messageMap = new Map(persistedMessages.map((entry) => [entry.id, entry]));
+    for (const messageEntry of normalizedIncomingMessages) {
+      messageMap.set(messageEntry.id, messageEntry);
+    }
+
+    return Array.from(messageMap.values())
+      .sort((firstMessage, secondMessage) => firstMessage.timestamp - secondMessage.timestamp)
+      .slice(-CHAT_HISTORY_LIMIT);
+  }, [chatMessages, persistedMessages]);
+
+  const mentionTerms = useMemo(() => {
+    const terms = [
+      localParticipant.identity,
+      localParticipant.name,
+      participantIdentity,
+      "you",
+    ]
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter(Boolean);
+
+    return Array.from(new Set(terms));
+  }, [localParticipant.identity, localParticipant.name, participantIdentity]);
+
+  const messagesWithMentionState = useMemo(() => {
+    return mergedMessages.map((messageEntry) => {
+      const lowerMessage = String(messageEntry.message || "").toLowerCase();
+      const isMentioned = mentionTerms.some((term) => {
+        if (!term || term.length < 2) {
+          return false;
+        }
+
+        const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const mentionPattern = new RegExp(`(^|\\s|[@#])${escapedTerm}(\\b|\\s|$)`, "i");
+        return mentionPattern.test(lowerMessage);
+      });
+
+      return {
+        ...messageEntry,
+        isMentioned,
+      };
+    });
+  }, [mentionTerms, mergedMessages]);
+
+  useEffect(() => {
+    if (!mergedMessages.length) {
+      clearPersistedList(chatStorageKey);
+      return;
+    }
+
+    writePersistedList(chatStorageKey, mergedMessages);
+  }, [chatStorageKey, mergedMessages]);
+
+  const unreadCount = useMemo(() => {
+    if (!messagesWithMentionState.length) {
+      return 0;
+    }
+
+    let count = 0;
+    for (let index = lastReadMessageIndex + 1; index < messagesWithMentionState.length; index += 1) {
+      const messageEntry = messagesWithMentionState[index];
+      if (messageEntry.fromIdentity !== localParticipant.identity) {
+        count += 1;
+      }
+    }
+    return count;
+  }, [lastReadMessageIndex, localParticipant.identity, messagesWithMentionState]);
+
+  useEffect(() => {
+    const containerElement = scrollContainerRef.current;
+    if (!containerElement) {
+      return;
+    }
+
+    containerElement.scrollTop = containerElement.scrollHeight;
+    setLastReadMessageIndex(messagesWithMentionState.length - 1);
+  }, [messagesWithMentionState.length]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    const trimmedDraft = draftMessage.trim();
+    if (!trimmedDraft) {
+      return;
+    }
+
+    setSendError("");
+    try {
+      await send(trimmedDraft);
+      setDraftMessage("");
+      setLastReadMessageIndex(messagesWithMentionState.length);
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : "Unable to send message.");
+    }
+  };
+
+  return (
+    <section className="conference-side-panel chat-panel">
+      <div className="chat-panel-header">
+        <div className="chat-panel-title-row">
+          <h2>Chat</h2>
+          {unreadCount > 0 ? <span className="chat-unread-badge">{unreadCount}</span> : null}
+        </div>
+        <p>Messages are kept in this tab until you leave the room.</p>
+      </div>
+
+      <div className="chat-panel-list" ref={scrollContainerRef}>
+        {messagesWithMentionState.length ? (
+          messagesWithMentionState.map((messageEntry) => {
+            const isOwnMessage = messageEntry.fromIdentity === localParticipant.identity;
+            return (
+              <article
+                className={`chat-panel-entry ${isOwnMessage ? "is-own" : "is-remote"} ${
+                  messageEntry.isMentioned && !isOwnMessage ? "is-mention" : ""
+                }`}
+                key={messageEntry.id}
+              >
+                <div className="chat-panel-entry-meta">
+                  <strong>{isOwnMessage ? "You" : messageEntry.fromName}</strong>
+                  <span>{new Date(messageEntry.timestamp).toLocaleTimeString()}</span>
+                </div>
+                <p>{messageEntry.message}</p>
+                {messageEntry.isMentioned && !isOwnMessage ? (
+                  <span className="chat-mention-chip">Mention</span>
+                ) : null}
+              </article>
+            );
+          })
+        ) : (
+          <p className="chat-panel-empty">No messages yet. Start the conversation.</p>
+        )}
+      </div>
+
+      <form className="chat-panel-form" onSubmit={handleSubmit}>
+        <label htmlFor="chat-draft-input">Message</label>
+        <textarea
+          id="chat-draft-input"
+          value={draftMessage}
+          onChange={(event) => setDraftMessage(event.target.value)}
+          placeholder="Type a message"
+          rows={2}
+        />
+        <div className="chat-panel-form-actions">
+          <button type="submit" className="secondary-btn" disabled={isSending || !draftMessage.trim()}>
+            {isSending ? "Sending..." : "Send"}
+          </button>
+          {sendError ? <span className="chat-panel-error">{sendError}</span> : null}
+        </div>
+      </form>
+    </section>
+  );
+}
 
 function RoomInsightsPanel() {
   const participants = useParticipants();
@@ -75,14 +303,14 @@ function RoomInsightsPanel() {
   );
 }
 
-function TranscriptPanel() {
+function TranscriptPanel({ roomName, participantIdentity }) {
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
   const [targetLanguage, setTargetLanguage] = useState("en");
   const [translatedEntries, setTranslatedEntries] = useState({});
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState("");
-  const [localTranscriptEntries, setLocalTranscriptEntries] = useState([]);
+  const [captureError, setCaptureError] = useState("");
   const [speechStatus, setSpeechStatus] = useState(() => {
     if (typeof window === "undefined") {
       return "unsupported";
@@ -92,6 +320,11 @@ function TranscriptPanel() {
     return SpeechRecognition ? "idle" : "unsupported";
   });
   const { textStreams } = useTextStream(TRANSCRIPT_TOPIC);
+  const transcriptStorageKey = useMemo(
+    () => getTranscriptStorageKey(roomName, participantIdentity),
+    [roomName, participantIdentity]
+  );
+  const [persistedTranscriptHistory] = useState(() => readPersistedList(transcriptStorageKey));
 
   const transcriptApiUrl = useMemo(
     () => `${appConfig.backendHttpUrl}/livekit/translate`,
@@ -108,34 +341,48 @@ function TranscriptPanel() {
   }, [participants]);
 
   const transcriptItems = useMemo(() => {
-    const sharedItems = textStreams.map((item, index) => {
+    return textStreams.map((item, index) => {
       const rawText = item?.text ?? String(item ?? "");
       const speakerIdentity = item?.participantInfo?.identity ?? "Speaker";
       const speaker =
         participantLabelByIdentity.get(speakerIdentity) || speakerIdentity || "Speaker";
-      const timestampValue = item?.streamInfo?.timestamp ?? index;
+      const timestampValue = Number(item?.streamInfo?.timestamp ?? index);
+      const streamId = item?.streamInfo?.id ?? "stream";
+      const stableId = `${streamId}:${speakerIdentity}:${timestampValue}:${rawText}`;
 
       return {
-        id: item?.id ?? item?.sid ?? `${index}-${timestampValue}-${rawText}`,
+        id: item?.id ?? item?.sid ?? stableId,
         text: String(rawText).trim(),
         speaker: String(speaker),
         timestamp: timestampValue,
         source: "shared-text-stream",
-        order: index,
+        fromIdentity: speakerIdentity,
       };
     });
+  }, [participantLabelByIdentity, textStreams]);
 
-    const localItems = localTranscriptEntries.map((item, index) => ({
-      ...item,
-      source: "local-echo",
-      order: sharedItems.length + index,
-    }));
+  const transcriptHistory = useMemo(() => {
+    const transcriptMap = new Map(persistedTranscriptHistory.map((entry) => [entry.id, entry]));
+    for (const transcriptEntry of transcriptItems) {
+      transcriptMap.set(transcriptEntry.id, transcriptEntry);
+    }
 
-    return [...sharedItems, ...localItems];
-  }, [localTranscriptEntries, participantLabelByIdentity, textStreams]);
+    return Array.from(transcriptMap.values())
+      .sort((firstEntry, secondEntry) => firstEntry.timestamp - secondEntry.timestamp)
+      .slice(-TRANSCRIPT_HISTORY_LIMIT);
+  }, [persistedTranscriptHistory, transcriptItems]);
+
+  useEffect(() => {
+    if (!transcriptHistory.length) {
+      clearPersistedList(transcriptStorageKey);
+      return;
+    }
+
+    writePersistedList(transcriptStorageKey, transcriptHistory);
+  }, [transcriptHistory, transcriptStorageKey]);
 
   const displayedTranscriptText = useMemo(() => {
-    return transcriptItems
+    return transcriptHistory
       .map((entry) => {
         const lineText = targetLanguage === "en" ? entry.text : translatedEntries[entry.id] || entry.text;
         const timeLabel = new Date(entry.timestamp).toLocaleTimeString();
@@ -143,10 +390,10 @@ function TranscriptPanel() {
         return `[${timeLabel}] ${entry.speaker}: ${lineText}`;
       })
       .join("\n");
-  }, [transcriptItems, targetLanguage, translatedEntries]);
+  }, [targetLanguage, transcriptHistory, translatedEntries]);
 
   const handleDownloadTranscript = () => {
-    if (!transcriptItems.length) {
+    if (!transcriptHistory.length) {
       return;
     }
 
@@ -168,14 +415,33 @@ function TranscriptPanel() {
       return undefined;
     }
 
+    let isMounted = true;
+    let restartTimer = null;
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
     recognition.continuous = true;
     recognition.interimResults = true;
 
     recognition.onstart = () => setSpeechStatus("listening");
-    recognition.onerror = () => setSpeechStatus("error");
-    recognition.onend = () => setSpeechStatus("stopped");
+    recognition.onerror = (event) => {
+      setSpeechStatus("error");
+      setCaptureError(event?.error ? `Speech capture error: ${event.error}` : "Speech capture failed.");
+    };
+    recognition.onend = () => {
+      if (!isMounted) {
+        setSpeechStatus("stopped");
+        return;
+      }
+
+      setSpeechStatus("restarting");
+      restartTimer = window.setTimeout(() => {
+        try {
+          recognition.start();
+        } catch {
+          setSpeechStatus("error");
+        }
+      }, 350);
+    };
     recognition.onresult = async (event) => {
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
@@ -190,18 +456,10 @@ function TranscriptPanel() {
 
         try {
           await localParticipant.sendText(transcriptText, { topic: TRANSCRIPT_TOPIC });
-          setLocalTranscriptEntries((previousEntries) => [
-            ...previousEntries,
-            {
-              id: `${Date.now()}-${previousEntries.length}`,
-              text: transcriptText,
-              speaker: localParticipant.name || localParticipant.identity || "You",
-              timestamp: Date.now(),
-            },
-          ]);
+          setCaptureError("");
         } catch (error) {
           setSpeechStatus("error");
-          setTranslationError(
+          setCaptureError(
             error instanceof Error ? error.message : "Failed to publish transcript to the room."
           );
           return;
@@ -216,9 +474,13 @@ function TranscriptPanel() {
     }
 
     return () => {
+      isMounted = false;
       recognition.onresult = null;
       recognition.onend = null;
       recognition.onerror = null;
+      if (restartTimer) {
+        window.clearTimeout(restartTimer);
+      }
       try {
         recognition.stop();
       } catch {
@@ -229,7 +491,7 @@ function TranscriptPanel() {
 
   useEffect(() => {
     const translateEntries = async () => {
-      if (!transcriptItems.length) {
+      if (!transcriptHistory.length) {
         setTranslatedEntries({});
         return;
       }
@@ -245,7 +507,7 @@ function TranscriptPanel() {
 
       try {
         const translations = await Promise.all(
-          transcriptItems.map(async (entry) => {
+          transcriptHistory.map(async (entry) => {
             if (!entry.text) {
               return [entry.id, ""];
             }
@@ -281,7 +543,7 @@ function TranscriptPanel() {
     };
 
     translateEntries();
-  }, [targetLanguage, transcriptItems, transcriptApiUrl]);
+  }, [targetLanguage, transcriptApiUrl, transcriptHistory]);
 
   return (
     <section className="conference-side-panel transcript-panel">
@@ -307,7 +569,7 @@ function TranscriptPanel() {
             type="button"
             className="secondary-btn transcript-download-btn"
             onClick={handleDownloadTranscript}
-            disabled={!transcriptItems.length}
+            disabled={!transcriptHistory.length}
           >
             Download TXT
           </button>
@@ -318,23 +580,26 @@ function TranscriptPanel() {
         <span>
           {isTranslating
             ? "Translating…"
-            : `${transcriptItems.length} transcript line(s)`}
+            : `${transcriptHistory.length} transcript line(s)`}
         </span>
         <span className="transcript-source-state">
           {speechStatus === "unsupported"
             ? "Browser captions unavailable; shared room transcript still plays back"
             : speechStatus === "listening"
               ? "Capturing microphone and publishing to the room"
+              : speechStatus === "restarting"
+                ? "Reconnecting speech capture"
               : speechStatus === "error"
                 ? "Transcript capture paused"
                 : "Ready to capture and publish shared captions"}
         </span>
         {translationError ? <span className="transcript-error">{translationError}</span> : null}
+        {captureError ? <span className="transcript-error">{captureError}</span> : null}
       </div>
 
       <div className="transcript-list">
-        {transcriptItems.length ? (
-          transcriptItems.map((entry) => (
+        {transcriptHistory.length ? (
+          transcriptHistory.map((entry) => (
             <article className="transcript-item" key={entry.id}>
               <div className="transcript-meta">
                 <strong>{entry.speaker}</strong>
@@ -355,7 +620,7 @@ function TranscriptPanel() {
   );
 }
 
-function CustomConferenceLayout({ meetingView, panelMode, insightsMode }) {
+function CustomConferenceLayout({ meetingView, panelMode, insightsMode, roomName, participantIdentity }) {
   const [widgetState, setWidgetState] = useState({
     showChat: false,
     unreadMessages: 0,
@@ -454,9 +719,17 @@ function CustomConferenceLayout({ meetingView, panelMode, insightsMode }) {
         {sidePanelMode !== "hidden" ? (
           <aside className={`conference-side-panel conference-side-panel-${sidePanelMode}`}>
             {sidePanelMode === "chat" ? (
-              <Chat className="conference-side-chat" />
+              <ChatPanel
+                key={`chat-${roomName}-${participantIdentity}`}
+                roomName={roomName}
+                participantIdentity={participantIdentity}
+              />
             ) : sidePanelMode === "transcript" ? (
-              <TranscriptPanel />
+              <TranscriptPanel
+                key={`transcript-${roomName}-${participantIdentity}`}
+                roomName={roomName}
+                participantIdentity={participantIdentity}
+              />
             ) : (
               <RoomInsightsPanel />
             )}
@@ -564,8 +837,11 @@ function RoomPage() {
   }, [location.state, routeRoomName, tokenApiUrl]);
 
   const currentRoomName = sessionInfo.roomName || routeRoomName;
+  const participantIdentity = sessionInfo.participantIdentity;
 
   const handleLeave = () => {
+    clearPersistedList(getChatStorageKey(currentRoomName, participantIdentity));
+    clearPersistedList(getTranscriptStorageKey(currentRoomName, participantIdentity));
     clearLastSession();
     navigate("/join", { replace: true });
   };
@@ -644,7 +920,13 @@ function RoomPage() {
             </label>
           </section>
 
-          <CustomConferenceLayout meetingView={meetingView} panelMode={panelMode} insightsMode={insightsMode} />
+          <CustomConferenceLayout
+            meetingView={meetingView}
+            panelMode={panelMode}
+            insightsMode={insightsMode}
+            roomName={currentRoomName}
+            participantIdentity={participantIdentity}
+          />
           <ConnectionStateToast />
           <RoomAudioRenderer />
         </div>

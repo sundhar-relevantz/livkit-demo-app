@@ -116,8 +116,7 @@
 
 .conference-page {
   height: 100vh;
-  display: grid;
-  grid-template-rows: auto 1fr;
+  overflow: hidden;
 }
 
 .teams-surface {
@@ -170,13 +169,15 @@
 .conference-shell {
   height: 100%;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
+  min-height: 0;
 }
 
 .conference-content {
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 300px;
+  overflow: hidden;
 }
 
 .layout-stage {
@@ -184,7 +185,7 @@
   min-width: 0;
   min-height: 0;
   height: 100%;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .conference-content.side-panel-compact {
@@ -208,9 +209,25 @@
   min-height: 0;
   width: 100%;
   height: 100%;
-  display: grid;
-  grid-template-rows: 1fr auto;
+  display: flex;
+  flex-direction: column;
   transition: transform 0.25s ease;
+}
+
+.lk-grid-layout-wrapper,
+.lk-focus-layout-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+
+.custom-conference-layout .lk-control-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 7;
+  margin: 0;
+  border-top: 1px solid #c9d8e8;
+  background: linear-gradient(180deg, rgba(248, 252, 255, 0.95) 0%, rgba(238, 246, 255, 0.98) 100%);
+  backdrop-filter: blur(8px);
 }
 
 .conference-side-panel {
@@ -218,7 +235,9 @@
   min-height: 0;
   border-left: 1px solid #dbe5ef;
   background: #f8fbff;
-  overflow: hidden;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .conference-side-panel-chat {
@@ -231,18 +250,142 @@
   border-left: 1px solid #d6e0eb;
 }
 
-.conference-side-chat {
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   height: 100%;
+  min-height: 0;
+  padding: 12px;
   background: #f5f7fb;
 }
 
-.conference-side-chat .lk-chat {
-  background: #f5f7fb;
+.chat-panel-header h2 {
+  margin: 0;
+  font-size: 1.02rem;
+  color: #10304c;
 }
 
-.conference-side-chat .lk-chat-entry,
-.conference-side-chat .lk-chat-form {
+.chat-panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-unread-badge {
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #ffffff;
+  background: #d63636;
+}
+
+.chat-panel-header p {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: #5a748f;
+}
+
+.chat-panel-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.chat-panel-entry {
+  border-radius: 10px;
+  border: 1px solid #d8e4f2;
+  padding: 9px;
   background: #ffffff;
+}
+
+.chat-panel-entry.is-own {
+  border-color: #b7d3f2;
+  background: #eff7ff;
+}
+
+.chat-panel-entry.is-mention {
+  border-color: #f0c35d;
+  background: linear-gradient(180deg, #fffaf0 0%, #fff5dd 100%);
+  box-shadow: 0 0 0 2px rgba(240, 195, 93, 0.22);
+}
+
+.chat-panel-entry-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: #4d6f8d;
+  font-size: 0.75rem;
+}
+
+.chat-panel-entry p {
+  margin: 0;
+  color: #17354d;
+  line-height: 1.35;
+}
+
+.chat-mention-chip {
+  display: inline-flex;
+  margin-top: 8px;
+  border: 1px solid #e2b24b;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #8a5b00;
+  background: #fff6df;
+}
+
+.chat-panel-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed #c9dae9;
+  border-radius: 10px;
+  color: #5a748f;
+  background: #fdfefe;
+}
+
+.chat-panel-form {
+  display: grid;
+  gap: 6px;
+}
+
+.chat-panel-form label {
+  font-size: 0.78rem;
+  color: #244766;
+  font-weight: 600;
+}
+
+.chat-panel-form textarea {
+  border-radius: 8px;
+  border: 1px solid #b9cce2;
+  padding: 8px 10px;
+  font-size: 0.92rem;
+  resize: vertical;
+  min-height: 54px;
+  background: #ffffff;
+}
+
+.chat-panel-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-panel-error {
+  color: #b42318;
+  font-size: 0.78rem;
 }
 
 .transcript-panel {
@@ -250,6 +393,7 @@
   flex-direction: column;
   gap: 12px;
   height: 100%;
+  min-height: 0;
   padding: 14px;
   background: #f8fbff;
 }
@@ -316,6 +460,7 @@
 
 .transcript-list {
   display: grid;
+  flex: 1;
   gap: 10px;
   overflow-y: auto;
   min-height: 0;
@@ -373,6 +518,7 @@
   border-left: 0;
   background: #f8fbff;
   padding: 14px;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -507,7 +653,7 @@
   .conference-side-panel {
     border-left: 0;
     border-top: 1px solid #dbe5ef;
-    max-height: 240px;
+    max-height: 44vh;
   }
 
   .room-insights {
@@ -517,7 +663,7 @@
   }
 
   .transcript-panel {
-    max-height: 260px;
+    max-height: none;
   }
 
   .leave-button {
