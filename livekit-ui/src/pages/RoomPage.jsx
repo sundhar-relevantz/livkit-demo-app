@@ -37,7 +37,7 @@ import {
 /**
  * Controls the room stage, side panels, and overlay subtitle visibility.
  */
-function CustomConferenceLayout({ meetingView, panelMode, insightsMode, roomName, participantIdentity }) {
+function CustomConferenceLayout({ meetingView, insightsEnabled, roomName, participantIdentity }) {
   const [widgetState, setWidgetState] = useState({
     showChat: false,
     unreadMessages: 0,
@@ -92,15 +92,8 @@ function CustomConferenceLayout({ meetingView, panelMode, insightsMode, roomName
   }, [focusTrack, screenShareTracks, layoutContext]);
 
   const isChatOpen = widgetState.showChat;
-  const shouldShowInsights = insightsMode !== "hidden";
-  const effectivePanelMode = isChatOpen ? "chat" : panelMode;
-  const showTranscriptOverlay = panelMode === "transcript" && !isChatOpen;
-  const sidePanelMode =
-    effectivePanelMode === "chat"
-      ? "chat"
-      : shouldShowInsights
-          ? insightsMode
-          : "hidden";
+  const showTranscriptOverlay = !isChatOpen;
+  const sidePanelMode = isChatOpen ? "chat" : insightsEnabled ? "expanded" : "hidden";
 
   return (
     <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
@@ -179,8 +172,7 @@ function RoomPage() {
     error: "",
   });
   const [meetingView, setMeetingView] = useState("auto");
-  const [panelMode, setPanelMode] = useState("insights");
-  const [insightsMode, setInsightsMode] = useState("expanded");
+  const [insightsEnabled, setInsightsEnabled] = useState(true);
 
   useEffect(() => {
     if (location.state?.token) {
@@ -324,28 +316,18 @@ function RoomPage() {
               </select>
             </label>
 
-            <label>
-              Panel
-              <select value={panelMode} onChange={(event) => setPanelMode(event.target.value)}>
-                <option value="insights">Insights</option>
-                <option value="transcript">Transcript</option>
-              </select>
-            </label>
-
-            <label>
-              Insights
-              <select value={insightsMode} onChange={(event) => setInsightsMode(event.target.value)}>
-                <option value="expanded">Expanded</option>
-                <option value="compact">Compact</option>
-                <option value="hidden">Hidden</option>
-              </select>
-            </label>
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => setInsightsEnabled((current) => !current)}
+            >
+              {insightsEnabled ? "Hide insights" : "Show insights"}
+            </button>
           </section>
 
           <CustomConferenceLayout
             meetingView={meetingView}
-            panelMode={panelMode}
-            insightsMode={insightsMode}
+            insightsEnabled={insightsEnabled}
             roomName={currentRoomName}
             participantIdentity={participantIdentity}
           />
