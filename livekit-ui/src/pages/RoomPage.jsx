@@ -335,7 +335,7 @@ function RoomInsightsPanel() {
   );
 }
 
-function TranscriptPanel({ roomName, participantIdentity }) {
+function TranscriptPanel({ roomName, participantIdentity, variant = "panel" }) {
   const { localParticipant } = useLocalParticipant();
   const participants = useParticipants();
   const transcriptions = useTranscriptions();
@@ -446,6 +446,8 @@ function TranscriptPanel({ roomName, participantIdentity }) {
       .sort((firstEntry, secondEntry) => firstEntry.timestamp - secondEntry.timestamp)
       .slice(-TRANSCRIPT_HISTORY_LIMIT);
   }, [persistedTranscriptHistory, transcriptItems]);
+  const subtitleEntries = useMemo(() => transcriptHistory.slice(-2), [transcriptHistory]);
+  const isOverlay = variant === "overlay";
 
   useEffect(() => {
     if (!transcriptHistory.length) {
@@ -637,6 +639,42 @@ function TranscriptPanel({ roomName, participantIdentity }) {
     translateEntries();
   }, [targetLanguage, transcriptApiUrl, transcriptHistory]);
 
+  if (isOverlay) {
+    return (
+      <section className="transcript-overlay-shell" aria-label="Live subtitles">
+        <div className="transcript-overlay-card">
+          <div className="transcript-overlay-header">
+            <span className="transcript-overlay-title">Live subtitles</span>
+            <span className="transcript-source-state transcript-overlay-state">
+              {speechStatus === "listening"
+                ? "Capturing live"
+                : speechStatus === "restarting"
+                  ? "Reconnecting"
+                  : speechStatus === "error"
+                    ? "Paused"
+                    : "Ready"}
+            </span>
+          </div>
+
+          <div className="transcript-overlay-lines">
+            {subtitleEntries.length ? (
+              subtitleEntries.map((entry) => (
+                <article className="transcript-overlay-line" key={entry.id}>
+                  <strong>{entry.speaker}</strong>
+                  <p>{targetLanguage === "en" ? entry.text : translatedEntries[entry.id] || entry.text}</p>
+                </article>
+              ))
+            ) : (
+              <p className="transcript-empty transcript-overlay-empty">
+                Transcript will appear here as live subtitles.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="conference-side-panel transcript-panel">
       <div className="transcript-header">
@@ -769,12 +807,11 @@ function CustomConferenceLayout({ meetingView, panelMode, insightsMode, roomName
   const isChatOpen = widgetState.showChat;
   const shouldShowInsights = insightsMode !== "hidden";
   const effectivePanelMode = isChatOpen ? "chat" : panelMode;
+  const showTranscriptOverlay = panelMode === "transcript" && !isChatOpen;
   const sidePanelMode =
     effectivePanelMode === "chat"
       ? "chat"
-      : effectivePanelMode === "transcript"
-        ? "transcript"
-        : shouldShowInsights
+      : shouldShowInsights
           ? insightsMode
           : "hidden";
 
@@ -804,6 +841,15 @@ function CustomConferenceLayout({ meetingView, panelMode, insightsMode, roomName
               </div>
             )}
 
+            {showTranscriptOverlay ? (
+              <TranscriptPanel
+                key={`transcript-${roomName}-${participantIdentity}`}
+                roomName={roomName}
+                participantIdentity={participantIdentity}
+                variant="overlay"
+              />
+            ) : null}
+
             <ControlBar controls={{ chat: true, settings: false }} />
           </div>
         </div>
@@ -813,12 +859,6 @@ function CustomConferenceLayout({ meetingView, panelMode, insightsMode, roomName
             {sidePanelMode === "chat" ? (
               <ChatPanel
                 key={`chat-${roomName}-${participantIdentity}`}
-                roomName={roomName}
-                participantIdentity={participantIdentity}
-              />
-            ) : sidePanelMode === "transcript" ? (
-              <TranscriptPanel
-                key={`transcript-${roomName}-${participantIdentity}`}
                 roomName={roomName}
                 participantIdentity={participantIdentity}
               />

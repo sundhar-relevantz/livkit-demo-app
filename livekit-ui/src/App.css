@@ -205,6 +205,7 @@
 }
 
 .custom-conference-layout {
+  position: relative;
   min-width: 0;
   min-height: 0;
   width: 100%;
@@ -228,6 +229,80 @@
   border-top: 1px solid #c9d8e8;
   background: linear-gradient(180deg, rgba(248, 252, 255, 0.95) 0%, rgba(238, 246, 255, 0.98) 100%);
   backdrop-filter: blur(8px);
+}
+
+.transcript-overlay-shell {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  z-index: 8;
+  width: min(900px, calc(100% - 24px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.transcript-overlay-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(185, 204, 226, 0.9);
+  border-radius: 16px;
+  background: rgba(248, 251, 255, 0.94);
+  box-shadow: 0 18px 40px rgba(15, 47, 77, 0.18);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.transcript-overlay-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.transcript-overlay-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #10304c;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.transcript-overlay-state {
+  font-size: 0.74rem;
+  padding: 3px 8px;
+}
+
+.transcript-overlay-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transcript-overlay-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #17354d;
+}
+
+.transcript-overlay-line strong {
+  flex: 0 0 auto;
+  min-width: 84px;
+  color: #0f2942;
+}
+
+.transcript-overlay-line p {
+  margin: 0;
+  flex: 1;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.transcript-overlay-empty {
+  margin: 0;
+  border-style: dashed;
 }
 
 .conference-side-panel {
@@ -697,6 +772,25 @@
 
   .transcript-panel {
     max-height: none;
+  }
+
+  .transcript-overlay-shell {
+    bottom: 72px;
+    width: calc(100% - 16px);
+  }
+
+  .transcript-overlay-card {
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .transcript-overlay-line {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .transcript-overlay-line strong {
+    min-width: 0;
   }
 
   .leave-button {
