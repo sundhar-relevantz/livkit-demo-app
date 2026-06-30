@@ -1,0 +1,13 @@
+api_key: "YOUR_LIVEKIT_API_KEY"
+api_secret: "YOUR_LIVEKIT_API_SECRET"
+ws_url: ws://livekit:7880
+insecure: true
+redis:
+  address: redis:6379
+health_port: 7980
+template_port: 7980
+log_level: info
+# Use local host storage for recording files.
+# The container will write into /recordings, which is mounted to ./recordings.
+recordings:
+  path: /recordings

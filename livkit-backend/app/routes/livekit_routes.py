@@ -5,6 +5,11 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 from app.core.config import settings
+from app.livekit.egress_service import (
+    list_egress as list_livekit_egress,
+    start_room_composite_recording,
+    stop_egress as stop_livekit_egress,
+)
 from app.livekit.token_service import generate_livekit_token
 from app.livekit.room_service import (
     create_livekit_room,
@@ -31,6 +36,16 @@ class RoomRequest(BaseModel):
 class TranslateRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     target_language: str = Field(min_length=2, max_length=16)
+
+
+class StartRecordingRequest(BaseModel):
+    room_name: str = Field(min_length=1, max_length=128)
+    filepath: str | None = Field(default=None, max_length=255)
+    layout: str = Field(default="grid", min_length=1, max_length=64)
+
+
+class StopRecordingRequest(BaseModel):
+    egress_id: str = Field(min_length=1, max_length=128)
 
 
 @router.post("/token")
@@ -189,5 +204,65 @@ async def translate_text(payload: TranslateRequest):
 
     except HTTPException:
         raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@router.post("/recordings/start")
+async def start_recording(payload: StartRecordingRequest):
+    try:
+        room_name = payload.room_name.strip()
+        if not room_name:
+            raise HTTPException(status_code=400, detail="room_name is required")
+
+        filepath = payload.filepath.strip() if payload.filepath else None
+        layout = payload.layout.strip() if payload.layout else "grid"
+
+        recording = await start_room_composite_recording(
+            room_name=room_name,
+            filepath=filepath,
+            layout=layout,
+        )
+
+        return {
+            "message": "Recording started successfully",
+            "recording": recording,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@router.post("/recordings/stop")
+async def stop_recording(payload: StopRecordingRequest):
+    try:
+        egress_id = payload.egress_id.strip()
+        if not egress_id:
+            raise HTTPException(status_code=400, detail="egress_id is required")
+
+        response = await stop_livekit_egress(egress_id)
+
+        return {
+            "message": "Recording stopped successfully",
+            "response": response,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@router.get("/recordings")
+async def get_recordings(room_name: str | None = None, active: bool | None = None):
+    try:
+        recordings = await list_livekit_egress(room_name=room_name, active=active)
+
+        return {
+            "recordings": recordings,
+        }
+
     except Exception as error:
         raise HTTPException(status_code=500, detail=str(error))

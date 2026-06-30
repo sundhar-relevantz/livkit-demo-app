@@ -20,6 +20,7 @@ def generate_livekit_token(
             api.VideoGrants(
                 room_join=True,
                 room=room_name,
+                room_record=True,
                 can_publish=True,
                 can_subscribe=True,
                 can_publish_data=True,
