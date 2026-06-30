@@ -16,6 +16,17 @@ AGENT_PROMPT = os.getenv(
 )
 
 
+def _get_aws_auth_kwargs() -> dict[str, str]:
+    api_key = os.getenv("AWS_ACCESS_KEY_ID") or os.getenv("AWS_BEDROCK_API_KEY", "")
+    api_secret = os.getenv("AWS_SECRET_ACCESS_KEY") or os.getenv("AWS_BEDROCK_API_KEY", "")
+    kwargs: dict[str, str] = {}
+    if api_key:
+        kwargs["api_key"] = api_key
+    if api_secret:
+        kwargs["api_secret"] = api_secret
+    return kwargs
+
+
 class DemoVoiceAgent(Agent):
     def __init__(self) -> None:
         super().__init__(instructions=AGENT_PROMPT)
@@ -24,15 +35,18 @@ class DemoVoiceAgent(Agent):
 async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
 
+    aws_auth_kwargs = _get_aws_auth_kwargs()
     session = AgentSession(
         stt=aws.stt.STT(region=os.getenv("AWS_REGION", "us-east-1")),
         llm=aws.llm.LLM(
             model=os.getenv("AWS_BEDROCK_MODEL_ID", "amazon.nova-sonic-v1:0"),
             region=os.getenv("AWS_REGION", "us-east-1"),
+            **aws_auth_kwargs,
         ),
         tts=aws.tts.TTS(
             voice=os.getenv("AWS_TTS_VOICE", "Ruth"),
             region=os.getenv("AWS_REGION", "us-east-1"),
+            **aws_auth_kwargs,
         ),
     )
 
