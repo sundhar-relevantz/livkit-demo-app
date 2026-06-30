@@ -15,6 +15,7 @@ import {
   RoomAudioRenderer,
   useCreateLayoutContext,
   useLocalParticipant,
+  useParticipants,
   usePinnedTracks,
   useTracks,
 } from "@livekit/components-react";
@@ -175,10 +176,22 @@ function RecordingControls({
   setInsightsEnabled,
 }) {
   const { localParticipant } = useLocalParticipant();
+  const participants = useParticipants();
+
+  const hasRoomMedia = Boolean(
+    [localParticipant, ...participants]
+      .filter(Boolean)
+      .some((participant) =>
+        participant
+          .getTrackPublications()
+          .some((publication) => Boolean(publication?.track))
+      )
+  );
+
   const canStartRecording = Boolean(
     localParticipant &&
       localParticipant.isConnected &&
-      (localParticipant.isCameraEnabled || localParticipant.isMicrophoneEnabled)
+      hasRoomMedia
   );
 
   return (
