@@ -16,6 +16,7 @@ from app.livekit.room_service import (
     list_livekit_rooms,
     delete_livekit_room,
 )
+from app.livekit.agent_service import dispatch_voice_agent
 
 router = APIRouter(
     prefix="/livekit",
@@ -46,6 +47,12 @@ class StartRecordingRequest(BaseModel):
 
 class StopRecordingRequest(BaseModel):
     egress_id: str = Field(min_length=1, max_length=128)
+
+
+class DispatchAgentRequest(BaseModel):
+    room_name: str = Field(min_length=1, max_length=128)
+    participant_identity: str = Field(min_length=1, max_length=128)
+    participant_name: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 @router.post("/token")
@@ -204,6 +211,35 @@ async def translate_text(payload: TranslateRequest):
 
     except HTTPException:
         raise
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+
+@router.post("/agents/dispatch")
+def dispatch_agent(payload: DispatchAgentRequest):
+    try:
+        room_name = payload.room_name.strip()
+        participant_identity = payload.participant_identity.strip()
+        participant_name = payload.participant_name.strip() if payload.participant_name else None
+
+        if not room_name or not participant_identity:
+            raise HTTPException(status_code=400, detail="room_name and participant_identity are required")
+
+        result = dispatch_voice_agent(
+            room_name=room_name,
+            participant_identity=participant_identity,
+            participant_name=participant_name,
+        )
+
+        return {
+            "message": "Voice agent dispatch requested",
+            "agent": result,
+        }
+
+    except HTTPException:
+        raise
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
     except Exception as error:
         raise HTTPException(status_code=500, detail=str(error))
 

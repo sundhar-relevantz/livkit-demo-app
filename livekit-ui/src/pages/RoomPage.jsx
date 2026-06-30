@@ -255,6 +255,8 @@ function RoomPage() {
   const [recordingStatus, setRecordingStatus] = useState("idle");
   const [recordingEgressId, setRecordingEgressId] = useState("");
   const [recordingError, setRecordingError] = useState("");
+  const [agentStatus, setAgentStatus] = useState("idle");
+  const [agentError, setAgentError] = useState("");
 
   useEffect(() => {
     if (location.state?.token) {
@@ -406,6 +408,41 @@ function RoomPage() {
     }
   };
 
+  const dispatchAgent = async () => {
+    if (!currentRoomName || !participantIdentity) {
+      setAgentError("Please join the room before launching the agent.");
+      return;
+    }
+
+    setAgentError("");
+    setAgentStatus("dispatching");
+
+    try {
+      const response = await fetch(`${appConfig.backendHttpUrl}/livekit/agents/dispatch`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          room_name: currentRoomName,
+          participant_identity: `${participantIdentity}-agent`,
+          participant_name: sessionInfo.participantName || "Voice Agent",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Unable to launch the agent (${response.status})`);
+      }
+
+      setAgentStatus("ready");
+    } catch (error) {
+      setAgentStatus("idle");
+      setAgentError(error instanceof Error ? error.message : "Failed to launch the voice agent.");
+    }
+  };
+
   const handleLeave = () => {
     clearPersistedList(getChatStorageKey(currentRoomName, participantIdentity));
     clearLastSession();
@@ -481,6 +518,11 @@ function RoomPage() {
                 ))}
               </select>
             </label>
+
+            <button type="button" className="secondary-btn" onClick={dispatchAgent} disabled={agentStatus === "dispatching"}>
+              {agentStatus === "dispatching" ? "Launching agent..." : "Add voice agent"}
+            </button>
+            {agentError ? <div className="recording-status recording-status-error">{agentError}</div> : null}
 
             <RecordingControls
               recordingStatus={recordingStatus}
